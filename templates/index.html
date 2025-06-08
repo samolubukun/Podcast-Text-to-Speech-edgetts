@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text-to-Speech Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            padding: 40px;
+        }
+
+        .form-section {
+            margin-bottom: 30px;
+        }
+
+        .form-section h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+        }
+
+        .speaker-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .speaker-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 15px;
+            border-left: 5px solid #667eea;
+        }
+
+        .speaker-card h3 {
+            color: #667eea;
+            margin-bottom: 8px;
+        }
+
+        .speaker-card p {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .textarea-container {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .script-input {
+            width: 100%;
+            min-height: 200px;
+            padding: 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 15px;
+            font-size: 1rem;
+            font-family: 'Courier New', monospace;
+            line-height: 1.6;
+            resize: vertical;
+            transition: border-color 0.3s ease;
+        }
+
+        .script-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .example-script {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border-left: 4px solid #28a745;
+        }
+
+        .example-script h4 {
+            color: #28a745;
+            margin-bottom: 10px;
+        }
+
+        .example-script pre {
+            font-family: 'Courier New', monospace;
+            color: #666;
+            white-space: pre-wrap;
+            font-size: 0.9rem;
+        }
+
+        .btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+            transform: translateY(-2px);
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .audio-section {
+            display: none;
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 15px;
+            margin-top: 30px;
+        }
+
+        .audio-section h3 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.3rem;
+        }
+
+        .audio-player {
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        .audio-controls {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            border-left: 4px solid #dc3545;
+            display: none;
+        }
+
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            border-left: 4px solid #28a745;
+            display: none;
+        }
+
+        .icon {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .main-content {
+                padding: 20px;
+            }
+            
+            .audio-controls {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎙️ Text-to-Speech Generator</h1>
+            <p>Convert your script into natural-sounding speech with multiple speakers</p>
+        </div>
+
+        <div class="main-content">
+            <div class="form-section">
+                <h2>Speaker Information</h2>
+                <div class="speaker-info">
+                    <div class="speaker-card">
+                        <h3>S1 - Speaker 1</h3>
+                        <p>US English (Aria Neural)</p>
+                        <p>Female voice with clear American accent</p>
+                    </div>
+                    <div class="speaker-card">
+                        <h3>S2 - Speaker 2</h3>
+                        <p>UK English (Ryan Neural)</p>
+                        <p>Male voice with British accent</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <h2>Script Input</h2>
+                
+                <div class="example-script">
+                    <h4>📝 Example Format:</h4>
+                    <pre>S1: Hello, welcome to our podcast!
+S2: Thanks for having me on the show.
+S1: Let's dive into today's topic.
+S2: That sounds great!</pre>
+                </div>
+
+                <form id="ttsForm">
+                    <div class="textarea-container">
+                        <textarea 
+                            id="scriptInput" 
+                            name="script" 
+                            class="script-input" 
+                            placeholder="Enter your script here using S1: and S2: format..."
+                            required
+                        >{% if script %}{{ script }}{% endif %}</textarea>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary" id="generateBtn">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                        </svg>
+                        Generate Audio
+                    </button>
+                </form>
+
+                <div class="loading" id="loadingSection">
+                    <div class="spinner"></div>
+                    <p>Generating your audio... This may take a few moments.</p>
+                </div>
+
+                <div class="error-message" id="errorMessage"></div>
+                <div class="success-message" id="successMessage"></div>
+            </div>
+
+            <div class="audio-section" id="audioSection">
+                <h3>🎵 Generated Audio</h3>
+                <audio id="audioPlayer" class="audio-player" controls>
+                    Your browser does not support the audio element.
+                </audio>
+                
+                <div class="audio-controls">
+                    <button type="button" class="btn btn-success" id="downloadBtn">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                        </svg>
+                        Download Audio
+                    </button>
+                    
+                    <button type="button" class="btn btn-secondary" id="resetBtn">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/>
+                        </svg>
+                        Generate New Audio
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentAudioBlob = null;
+        let currentFileName = null;
+
+        const form = document.getElementById('ttsForm');
+        const generateBtn = document.getElementById('generateBtn');
+        const loadingSection = document.getElementById('loadingSection');
+        const errorMessage = document.getElementById('errorMessage');
+        const successMessage = document.getElementById('successMessage');
+        const audioSection = document.getElementById('audioSection');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const scriptInput = document.getElementById('scriptInput');
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+            successMessage.style.display = 'none';
+        }
+
+        function showSuccess(message) {
+            successMessage.textContent = message;
+            successMessage.style.display = 'block';
+            errorMessage.style.display = 'none';
+        }
+
+        function hideMessages() {
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+        }
+
+        function setLoading(isLoading) {
+            if (isLoading) {
+                generateBtn.disabled = true;
+                generateBtn.innerHTML = `
+                    <div style="width: 20px; height: 20px; border: 2px solid #ffffff; border-top: 2px solid transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                    Generating...
+                `;
+                loadingSection.style.display = 'block';
+                audioSection.style.display = 'none';
+            } else {
+                generateBtn.disabled = false;
+                generateBtn.innerHTML = `
+                    <svg class="icon" viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                    </svg>
+                    Generate Audio
+                `;
+                loadingSection.style.display = 'none';
+            }
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const script = scriptInput.value.trim();
+            if (!script) {
+                showError('Please enter a script before generating audio.');
+                return;
+            }
+
+            // Validate script format
+            if (!script.includes('S1:') && !script.includes('S2:')) {
+                showError('Please use the correct format with S1: and S2: speaker labels.');
+                return;
+            }
+
+            hideMessages();
+            setLoading(true);
+
+            try {
+                const response = await fetch('/generate-audio', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ script: script })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Failed to generate audio');
+                }
+
+                // Get the audio blob
+                currentAudioBlob = await response.blob();
+                
+                // Extract filename from response headers or generate one
+                const contentDisposition = response.headers.get('content-disposition');
+                if (contentDisposition) {
+                    const matches = contentDisposition.match(/filename="([^"]*)/);
+                    currentFileName = matches ? matches[1] : 'generated_audio.mp3';
+                } else {
+                    currentFileName = `podcast_${Date.now()}.mp3`;
+                }
+
+                // Create object URL for audio player
+                const audioUrl = URL.createObjectURL(currentAudioBlob);
+                audioPlayer.src = audioUrl;
+                
+                // Show audio section
+                audioSection.style.display = 'block';
+                showSuccess('Audio generated successfully! You can now play and download your audio.');
+                
+                // Scroll to audio section
+                audioSection.scrollIntoView({ behavior: 'smooth' });
+
+            } catch (error) {
+                console.error('Error generating audio:', error);
+                showError(error.message || 'An error occurred while generating audio. Please try again.');
+            } finally {
+                setLoading(false);
+            }
+        });
+
+        downloadBtn.addEventListener('click', () => {
+            if (currentAudioBlob && currentFileName) {
+                const url = URL.createObjectURL(currentAudioBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = currentFileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                showSuccess('Audio download started!');
+            }
+        });
+
+        resetBtn.addEventListener('click', () => {
+            if (confirm('Are you sure you want to generate new audio? This will clear the current audio.')) {
+                audioSection.style.display = 'none';
+                hideMessages();
+                if (audioPlayer.src) {
+                    URL.revokeObjectURL(audioPlayer.src);
+                    audioPlayer.src = '';
+                }
+                currentAudioBlob = null;
+                currentFileName = null;
+                scriptInput.focus();
+            }
+        });
+
+        // Auto-resize textarea
+        scriptInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.max(200, this.scrollHeight) + 'px';
+        });
+
+        // Initialize textarea height
+        window.addEventListener('load', () => {
+            scriptInput.style.height = Math.max(200, scriptInput.scrollHeight) + 'px';
+        });
+    </script>
+</body>
+</html>
