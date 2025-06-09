@@ -5,33 +5,15 @@ from pydub import AudioSegment
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from fastapi.templating import Jinja2Templates
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import tempfile
 import shutil
 from typing import List, Dict
 import uuid
 import io
-import re
 from contextlib import asynccontextmanager
 
 app = FastAPI(title="Text-to-Speech API", description="Convert script to audio with multiple speakers")
-
-origins = [
-    "http://localhost:5173",
-    "https://contentnova.vercel.app",
-    "http://localhost:8000",
-    # Add more origins here
-]
-
-# Add CORS middleware to allow cross-origin requests
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins, 
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["*"],
-)
 
 # Setup Jinja2 templates
 templates = Jinja2Templates(directory="templates")
@@ -46,62 +28,20 @@ class ScriptRequest(BaseModel):
     script: str
 
 def parse_script(text: str) -> List[Dict[str, str]]:
-    """
-    Enhanced script parser that handles various formats:
-    - S1: text on separate lines
-    - S1: text S2: text on same line
-    - Mixed formats
-    - Case insensitive (s1:, S1:, etc.)
-    """
-    if not text.strip():
-        return []
-    
-    # Clean up the text - remove extra whitespace but preserve structure
-    text = re.sub(r'\s+', ' ', text.strip())
-    
-    # Pattern to match S1: or S2: followed by text until next speaker or end
-    # This regex captures speaker labels and their corresponding text
-    pattern = r'(S[12]):\s*([^S]*?)(?=S[12]:|$)'
-    
-    matches = re.findall(pattern, text, re.IGNORECASE | re.DOTALL)
-    
-    dialogue = []
-    for speaker, content in matches:
-        # Clean up speaker (ensure uppercase)
-        speaker = speaker.upper().strip()
-        
-        # Clean up content - remove extra whitespace and newlines
-        content = re.sub(r'\s+', ' ', content.strip())
-        
-        # Only add if we have valid speaker and non-empty content
-        if speaker in ["S1", "S2"] and content:
-            dialogue.append({"speaker": speaker, "text": content})
-    
-    # Fallback: if regex didn't work, try line-by-line parsing
-    if not dialogue:
-        dialogue = parse_script_fallback(text)
-    
-    return dialogue
-
-def parse_script_fallback(text: str) -> List[Dict[str, str]]:
-    """
-    Fallback parser for line-by-line format
-    """
+    """Parse script into dialogue format"""
     lines = text.strip().splitlines()
     dialogue = []
-    
     for line in lines:
         line = line.strip()
         if ":" in line and line:
-            # Find the first colon
-            colon_index = line.find(":")
-            if colon_index > 0:
-                speaker = line[:colon_index].strip().upper()
-                content = line[colon_index + 1:].strip()
+            parts = line.split(":", 1)
+            if len(parts) == 2:
+                speaker, content = parts
+                speaker = speaker.strip().upper()
+                content = content.strip()
                 
                 if speaker in ["S1", "S2"] and content:
                     dialogue.append({"speaker": speaker, "text": content})
-    
     return dialogue
 
 async def generate_audio_in_memory(dialogue: List[Dict[str, str]]) -> bytes:
@@ -201,13 +141,13 @@ async def generate_audio(request: ScriptRequest):
         if not request.script.strip():
             raise HTTPException(status_code=400, detail="Script cannot be empty")
         
-        # Parse the script with enhanced parser
+        # Parse the script
         dialogue = parse_script(request.script)
         
         if not dialogue:
             raise HTTPException(
                 status_code=400, 
-                detail="No valid dialogue found. Please use format 'S1: text' or 'S2: text'. Both speakers (S1 and S2) are supported, and can be on the same line or separate lines."
+                detail="No valid dialogue found. Please use format 'S1: text' or 'S2: text'"
             )
         
         # Generate audio in memory (preferred for deployment)
@@ -233,67 +173,6 @@ async def generate_audio(request: ScriptRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
-
-# Alternative endpoint that returns JSON response instead of streaming
-@app.post("/api/generate")
-async def generate_audio_api(request: ScriptRequest):
-    """
-    Alternative endpoint that returns base64 encoded audio for easier API integration
-    """
-    try:
-        # Validate input
-        if not request.script.strip():
-            raise HTTPException(status_code=400, detail="Script cannot be empty")
-        
-        # Parse the script with enhanced parser
-        dialogue = parse_script(request.script)
-        
-        if not dialogue:
-            raise HTTPException(
-                status_code=400, 
-                detail="No valid dialogue found. Please use format 'S1: text' or 'S2: text'. Both speakers (S1 and S2) are supported, and can be on the same line or separate lines."
-            )
-        
-        # Generate audio in memory
-        try:
-            audio_bytes = await generate_audio_in_memory(dialogue)
-        except Exception as e:
-            print(f"In-memory generation failed: {e}")
-            audio_bytes = await generate_audio_with_temp_files(dialogue)
-        
-        # Convert to base64 for JSON response
-        import base64
-        audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
-        
-        return {
-            "success": True,
-            "audio_data": audio_base64,
-            "content_type": "audio/mpeg",
-            "size_bytes": len(audio_bytes),
-            "dialogue_count": len(dialogue),
-            "parsed_dialogue": dialogue  # Include parsed dialogue for debugging
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
-
-@app.post("/test-parse")
-async def test_parse(request: ScriptRequest):
-    """
-    Test endpoint to see how the script gets parsed without generating audio
-    """
-    try:
-        dialogue = parse_script(request.script)
-        return {
-            "original_script": request.script,
-            "parsed_dialogue": dialogue,
-            "dialogue_count": len(dialogue),
-            "success": len(dialogue) > 0
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Parse error: {str(e)}")
 
 @app.get("/health")
 async def health_check():
