@@ -16,6 +16,13 @@ from contextlib import asynccontextmanager
 
 app = FastAPI(title="Text-to-Speech API", description="Convert script to audio with multiple speakers")
 
+origins = [
+    "http://localhost:5173",
+    "https://contentnova.vercel.app",
+    "http://localhost:8000",
+    # Add more origins here
+]
+
 # Add CORS middleware to allow cross-origin requests
 app.add_middleware(
     CORSMiddleware,
@@ -26,12 +33,7 @@ app.add_middleware(
 )
 
 
-origins = [
-    "http://localhost:5173",
-    "https://contentnova.vercel.app",
-    "http://localhost:8000",
-    # Add more origins here
-]
+
 
 # Setup Jinja2 templates
 templates = Jinja2Templates(directory="templates")
