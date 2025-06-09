@@ -5,6 +5,7 @@ from pydub import AudioSegment
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import tempfile
 import shutil
@@ -14,6 +15,23 @@ import io
 from contextlib import asynccontextmanager
 
 app = FastAPI(title="Text-to-Speech API", description="Convert script to audio with multiple speakers")
+
+# Add CORS middleware to allow cross-origin requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins, 
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["*"],
+)
+
+
+origins = [
+    "http://localhost:5173",
+    "https://contentnova.vercel.app",
+    "http://localhost:8000",
+    # Add more origins here
+]
 
 # Setup Jinja2 templates
 templates = Jinja2Templates(directory="templates")
@@ -168,6 +186,49 @@ async def generate_audio(request: ScriptRequest):
             media_type="audio/mpeg",
             headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
+# Alternative endpoint that returns JSON response instead of streaming
+@app.post("/api/generate")
+async def generate_audio_api(request: ScriptRequest):
+    """
+    Alternative endpoint that returns base64 encoded audio for easier API integration
+    """
+    try:
+        # Validate input
+        if not request.script.strip():
+            raise HTTPException(status_code=400, detail="Script cannot be empty")
+        
+        # Parse the script
+        dialogue = parse_script(request.script)
+        
+        if not dialogue:
+            raise HTTPException(
+                status_code=400, 
+                detail="No valid dialogue found. Please use format 'S1: text' or 'S2: text'"
+            )
+        
+        # Generate audio in memory
+        try:
+            audio_bytes = await generate_audio_in_memory(dialogue)
+        except Exception as e:
+            print(f"In-memory generation failed: {e}")
+            audio_bytes = await generate_audio_with_temp_files(dialogue)
+        
+        # Convert to base64 for JSON response
+        import base64
+        audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+        
+        return {
+            "success": True,
+            "audio_data": audio_base64,
+            "content_type": "audio/mpeg",
+            "size_bytes": len(audio_bytes)
+        }
         
     except HTTPException:
         raise
