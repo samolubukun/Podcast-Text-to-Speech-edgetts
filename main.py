@@ -126,7 +126,7 @@ async def generate_audio_in_memory(dialogue: List[Dict[str, str]]) -> bytes:
     # Combine all segments with pauses
     combined = AudioSegment.empty()
     for segment in audio_segments:
-        combined += segment + AudioSegment.silent(duration=700)
+        combined += segment + AudioSegment.silent(duration=600)
     
     # Export to bytes
     output_buffer = io.BytesIO()
@@ -173,7 +173,7 @@ async def generate_audio_with_temp_files(dialogue: List[Dict[str, str]]) -> byte
             file_path = os.path.join(segments_dir, file)
             if os.path.exists(file_path):
                 seg = AudioSegment.from_file(file_path)
-                combined += seg + AudioSegment.silent(duration=700)
+                combined += seg + AudioSegment.silent(duration=600)
         
         # Export to bytes
         output_buffer = io.BytesIO()
