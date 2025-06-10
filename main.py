@@ -12,11 +12,27 @@ from typing import List, Dict
 import uuid
 import io
 from contextlib import asynccontextmanager
+import httpx
+import logging
+from datetime import datetime
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Global scheduler instance
+scheduler = AsyncIOScheduler()
 
 app = FastAPI(title="Text-to-Speech API", description="Convert script to audio with multiple speakers")
 
 # Setup Jinja2 templates
 templates = Jinja2Templates(directory="templates")
+
+# Configuration
+KEEP_ALIVE_URL = "https://podcast-text-to-speech-edgetts.onrender.com/health"
+PING_INTERVAL_MINUTES = 14  # Ping every 14 minutes to prevent sleep
 
 # Map speaker codes to specific English text-to-speech voices
 VOICE_MAP = {
@@ -26,6 +42,45 @@ VOICE_MAP = {
 
 class ScriptRequest(BaseModel):
     script: str
+
+async def keep_alive_ping():
+    """
+    Ping the server to keep it alive on Render free tier
+    This prevents the service from going to sleep after 15 minutes of inactivity
+    """
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(KEEP_ALIVE_URL)
+            if response.status_code == 200:
+                logger.info(f"✅ Keep-alive ping successful at {datetime.now()}")
+            else:
+                logger.warning(f"⚠️ Keep-alive ping returned status {response.status_code}")
+    except httpx.TimeoutException:
+        logger.error("⏰ Keep-alive ping timed out")
+    except httpx.ConnectError:
+        logger.error("🔌 Keep-alive ping connection failed")
+    except Exception as e:
+        logger.error(f"❌ Keep-alive ping failed: {str(e)}")
+
+def start_keep_alive_scheduler():
+    """Start the keep-alive scheduler"""
+    if not scheduler.running:
+        # Add the keep-alive job
+        scheduler.add_job(
+            keep_alive_ping,
+            trigger=IntervalTrigger(minutes=PING_INTERVAL_MINUTES),
+            id='keep_alive_job',
+            name='Keep Alive Ping',
+            replace_existing=True
+        )
+        scheduler.start()
+        logger.info(f"🔄 Keep-alive scheduler started - pinging every {PING_INTERVAL_MINUTES} minutes")
+
+def stop_keep_alive_scheduler():
+    """Stop the keep-alive scheduler"""
+    if scheduler.running:
+        scheduler.shutdown()
+        logger.info("🛑 Keep-alive scheduler stopped")
 
 def parse_script(text: str) -> List[Dict[str, str]]:
     """Parse script into dialogue format"""
@@ -177,7 +232,12 @@ async def generate_audio(request: ScriptRequest):
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy", "environment": "production"}
+    return {
+        "status": "healthy", 
+        "environment": "production",
+        "timestamp": datetime.now().isoformat(),
+        "keep_alive_enabled": scheduler.running if scheduler else False
+    }
 
 @app.get("/system-info")
 async def system_info():
@@ -196,8 +256,37 @@ async def system_info():
         "environment_vars": {
             "PORT": os.getenv("PORT", "Not set"),
             "RENDER": os.getenv("RENDER", "Not set"),
+        },
+        "scheduler_status": {
+            "running": scheduler.running if scheduler else False,
+            "jobs": len(scheduler.get_jobs()) if scheduler and scheduler.running else 0,
+            "ping_interval_minutes": PING_INTERVAL_MINUTES,
+            "ping_url": KEEP_ALIVE_URL
         }
     }
+
+@app.get("/ping-status")
+async def ping_status():
+    """Get keep-alive ping status"""
+    return {
+        "scheduler_running": scheduler.running if scheduler else False,
+        "ping_interval_minutes": PING_INTERVAL_MINUTES,
+        "ping_url": KEEP_ALIVE_URL,
+        "jobs": [
+            {
+                "id": job.id,
+                "name": job.name,
+                "next_run": job.next_run_time.isoformat() if job.next_run_time else None
+            }
+            for job in scheduler.get_jobs()
+        ] if scheduler and scheduler.running else []
+    }
+
+@app.post("/manual-ping")
+async def manual_ping():
+    """Manually trigger a keep-alive ping"""
+    await keep_alive_ping()
+    return {"message": "Manual ping executed", "timestamp": datetime.now().isoformat()}
 
 # Startup event
 @app.on_event("startup")
@@ -209,8 +298,21 @@ async def startup_event():
     # Check if running on Render
     if os.getenv("RENDER"):
         print("Running on Render deployment")
+        # Start keep-alive scheduler only on Render
+        start_keep_alive_scheduler()
+        # Do an initial ping after a short delay
+        asyncio.create_task(asyncio.sleep(60))  # Wait 1 minute then ping
+        asyncio.create_task(keep_alive_ping())
     else:
         print("Running in local/development environment")
+        print("Keep-alive scheduler not started (local environment)")
+
+# Shutdown event
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Shutdown event handler"""
+    print("Shutting down Text-to-Speech API...")
+    stop_keep_alive_scheduler()
 
 if __name__ == "__main__":
     import uvicorn
