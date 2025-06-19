@@ -32,7 +32,7 @@ templates = Jinja2Templates(directory="templates")
 
 # Configuration
 KEEP_ALIVE_URL = "https://podcast-text-to-speech-edgetts.onrender.com/health"
-PING_INTERVAL_MINUTES = 14  # Ping every 14 minutes to prevent sleep
+PING_INTERVAL_MINUTES = 200  # Ping every 14 minutes to prevent sleep
 
 # Map speaker codes to specific English text-to-speech voices
 VOICE_MAP = {
